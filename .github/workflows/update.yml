@@ -1,0 +1,105 @@
+name: Update Windsurf AUR PKGBUILD
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force update"
+        required: false
+        default: "false"
+  schedule:
+    - cron: "0 */3 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check_version.outputs.changed }}
+      version: ${{ steps.get_version.outputs.version }}
+      sha256sum: ${{ steps.get_version.outputs.sha256sum }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg apt-transport-https
+
+      - name: Get latest version
+        id: get_version
+        run: |
+          chmod +x ./scripts/check-windsurf-version.sh
+          OUTPUT=$(./scripts/check-windsurf-version.sh)
+          VERSION=$(echo "$OUTPUT" | cut -d' ' -f1)
+          SHA256SUM=$(echo "$OUTPUT" | cut -d' ' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "sha256sum=$SHA256SUM" >> $GITHUB_OUTPUT
+
+      - name: Check if version changed
+        id: check_version
+        run: |
+          CURRENT_VERSION=$(grep -oP 'pkgver=\K[^"]+' package/PKGBUILD)
+          NEW_VERSION="${{ steps.get_version.outputs.version }}"
+          if [ "$CURRENT_VERSION" != "$NEW_VERSION" ] || [ "${{ github.event.inputs.force }}" == "true" ]; then
+            echo "Version changed!"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version unchanged"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  update-package:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Update PKGBUILD
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          sed -i "s/pkgver=.*/pkgver=$VERSION/" package/PKGBUILD
+          # Reset pkgrel to 1 since this is a new version
+          sed -i "s/pkgrel=.*/pkgrel=1/" package/PKGBUILD
+          # Update checksums
+          SHA256SUM="${{ needs.check-version.outputs.sha256sum }}"
+          sed -i "s|^sha256sums=('.*'\$|sha256sums=('$SHA256SUM'|" package/PKGBUILD
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update windsurf to version ${{ needs.check-version.outputs.version }}"
+          title: "Update windsurf to version ${{ needs.check-version.outputs.version }}"
+          body: |
+            This PR updates the windsurf package to version ${{ needs.check-version.outputs.version }}.
+
+            This is an automated PR created by the version check workflow.
+          branch: "update-windsurf-${{ needs.check-version.outputs.version }}"
+          base: "main"
+          labels: "automated pr"
+
+      - name: Merge Pull Request
+        if: ${{ steps.cpr.outputs.pull-request-operation == 'created' }}
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
+          
+  # Call publish workflow after PR is merged
+  call-publish:
+    needs: [update-package, check-version]
+    # Only run if update-package was successful AND a new version was detected AND a PR was created
+    if: |
+      needs.update-package.result == 'success' && 
+      needs.check-version.outputs.changed == 'true'
+    uses: ./.github/workflows/publish.yml
+    secrets: inherit
