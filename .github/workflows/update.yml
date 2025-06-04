@@ -2,11 +2,6 @@ name: Update Windsurf AUR PKGBUILD
 
 on:
   workflow_dispatch:
-    inputs:
-      force:
-        description: "Force update"
-        required: false
-        default: "false"
   schedule:
     - cron: "0 */3 * * *"
 
@@ -46,7 +41,7 @@ jobs:
         run: |
           CURRENT_VERSION=$(grep -oP 'pkgver=\K[^"]+' package/PKGBUILD)
           NEW_VERSION="${{ steps.get_version.outputs.version }}"
-          if [ "$CURRENT_VERSION" != "$NEW_VERSION" ] || [ "${{ github.event.inputs.force }}" == "true" ]; then
+          if [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
             echo "Version changed!"
             echo "changed=true" >> $GITHUB_OUTPUT
           else
