@@ -89,11 +89,13 @@ jobs:
 
       - name: Merge Pull Request
         if: ${{ steps.cpr.outputs.pull-request-operation == 'created' }}
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
-          
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: |
+          echo "Attempting to merge PR #${PR_NUMBER}"
+          gh pr merge "$PR_NUMBER" --merge --delete-branch --repo "${{ github.repository }}"
+          echo "PR #${PR_NUMBER} merged."
   # Call publish workflow after PR is merged
   # call-publish:
   #   needs: [update-package, check-version]
