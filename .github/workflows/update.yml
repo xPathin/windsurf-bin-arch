@@ -95,11 +95,11 @@ jobs:
           pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
           
   # Call publish workflow after PR is merged
-  call-publish:
-    needs: [update-package, check-version]
-    # Only run if update-package was successful AND a new version was detected AND a PR was created
-    if: |
-      needs.update-package.result == 'success' && 
-      needs.check-version.outputs.changed == 'true'
-    uses: ./.github/workflows/publish.yml
-    secrets: inherit
+  # call-publish:
+  #   needs: [update-package, check-version]
+  #   # Only run if update-package was successful AND a new version was detected AND a PR was created
+  #   if: |
+  #     needs.update-package.result == 'success' && 
+  #     needs.check-version.outputs.changed == 'true'
+  #   uses: ./.github/workflows/publish.yml
+  #   secrets: inherit
