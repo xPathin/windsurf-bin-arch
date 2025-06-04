@@ -1,7 +1,7 @@
 # Maintainer: Patrick Fischer <aur@pathin.me>
 
 pkgname=windsurf-bin
-pkgver=1.9.2
+pkgver=1.9.4
 pkgrel=1
 pkgdesc="Windsurf (formerly Codeium) is the world's most advanced AI coding assistant for developers and enterprises. Windsurf Editor — the first AI-native IDE that keeps developers in flow."
 arch=('x86_64')
@@ -28,7 +28,7 @@ options=('!strip') # ~0.49MB
 makedepends=(tar sed desktop-file-utils) # tar is faster than bsdtar.
 source=("https://windsurf-stable.codeiumdata.com/wVxQEIWkwPUEAGf3/apt/pool/main/w/windsurf/Windsurf-linux-x64-${pkgver}.deb"
 		"https://gitlab.archlinux.org/archlinux/packaging/packages/code/-/raw/main/code.sh")
-sha256sums=('4770e9147420dbac6e83f90bd77711e01745baa3c98f2606b3e030b960d6e04d'
+sha256sums=('07fe91f3c42922cf41531210957d2819be199c4c7d9f3dfd646a96868c75e452'
             '5da1525b5fe804b9192c05e1cbf8d751d852e3717fb2787c7ffe98fd5d93e8c1')
 package() {
 	tar -xf "data.tar.xz" --exclude 'usr/share/windsurf/[^r]*' --exclude 'usr/share/windsurf/*.pak'
