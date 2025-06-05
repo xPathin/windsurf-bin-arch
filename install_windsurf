@@ -109,7 +109,7 @@ if [ -z "$USER_CHOICE" ]; then
     echo "  1) Windsurf (Standard - ${WINDSURF_STANDARD_PKG_NAME})"
     echo "  2) Windsurf (Electron - ${WINDSURF_ELECTRON_PKG_NAME})"
     echo "--------------------------------------------------------------------"
-    read -r -p "Enter your choice (1 or 2, default: 1): " choice_num
+    read -r -p "Enter your choice (1 or 2, default: 1): " choice_num </dev/tty
     choice_num=${choice_num:-1} # Default to 1 if user presses Enter
 
     case "$choice_num" in
