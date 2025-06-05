@@ -1,0 +1,246 @@
+#!/bin/bash
+set -eo pipefail # Exit on error, treat unset variables as an error (implicitly), and propagate pipeline errors
+
+# --- Configuration ---
+# These can be overridden by environment variables if needed
+: "${GIT_REPO_URL:=https://github.com/xPathin/windsurf-bin-arch.git}"
+: "${CLONED_REPO_DIR_NAME:=windsurf-bin-arch}" # Local directory name for the cloned repo
+: "${PKGBUILD_SUBDIR:=package}" # Subdirectory within the repo containing the PKGBUILD
+: "${WINDSURF_STANDARD_PKG_NAME:=windsurf-bin}"
+: "${WINDSURF_ELECTRON_PKG_NAME:=windsurf-bin-electron-latest}"
+
+# --- Helper Functions ---
+log() {
+    echo "[INFO] $(date +'%T') - $1"
+}
+
+error_exit() {
+    echo "[ERROR] $(date +'%T') - $1" >&2
+    # Cleanup is handled by trap
+    exit 1
+}
+
+check_command() {
+    command -v "$1" >/dev/null 2>&1 || error_exit "Required command '$1' not found. Please install it."
+}
+
+get_installed_version() {
+    local pkg_name="$1"
+    if pacman -Q "$pkg_name" &>/dev/null; then
+        pacman -Q "$pkg_name" | awk '{print $2}'
+    else
+        echo "" # Not installed
+    fi
+}
+
+get_pkgbuild_version() {
+    local pkgbuild_file="$1"
+    if [ ! -f "$pkgbuild_file" ]; then
+        error_exit "PKGBUILD file not found at $pkgbuild_file"
+    fi
+    # Source PKGBUILD in a subshell to avoid polluting current environment
+    (
+        # shellcheck source=/dev/null
+        source "$pkgbuild_file"
+        if [ -z "${pkgver:-}" ] || [ -z "${pkgrel:-}" ]; then
+            error_exit "pkgver or pkgrel not defined in $pkgbuild_file"
+        fi
+        echo "${pkgver}-${pkgrel}"
+    )
+}
+
+# --- Pre-flight Checks ---
+log "Performing pre-flight checks..."
+check_command "git"
+check_command "pacman"
+check_command "makepkg"
+check_command "curl" # Useful if script is fetched via curl, or PKGBUILDs need it
+
+# --- Cleanup and Signal Handling ---
+cleanup_action() {
+    local dir_to_clean="$1"
+    local reason="$2"
+
+    if [ -n "$dir_to_clean" ] && [ -d "$dir_to_clean" ]; then
+        log "Cleaning up temporary directory: $dir_to_clean (Reason: $reason)"
+        # Attempt to return to initial CWD. If it fails, proceed with rm from current location.
+        (cd "$INITIAL_CWD" && rm -rf "$dir_to_clean") || rm -rf "$dir_to_clean"
+        log "Cleanup finished for $dir_to_clean."
+    elif [ -n "$reason" ] && [ "$reason" != "Normal Exit" ]; then
+        log "No temporary directory to clean or already cleaned ('$dir_to_clean' was not a valid directory)."
+    fi
+}
+
+# Trap for normal exit (will also be triggered by set -e exits if not handled by signal traps)
+trap 'cleanup_action "$TEMP_DIR" "Normal Exit"; TEMP_DIR=""' EXIT
+
+# Trap for specific signals
+handle_signal() {
+    local signal_name="$1"
+    # Unset the general EXIT trap to prevent double cleanup if we exit via kill
+    trap - EXIT
+    cleanup_action "$TEMP_DIR" "$signal_name"
+    TEMP_DIR="" # Mark as cleaned
+    log "Exiting due to $signal_name."
+    trap - "$signal_name" # Restore default handler for the signal
+    kill -s "$signal_name" "$$" # Re-send the signal to self to exit with default action/code
+}
+
+trap 'handle_signal INT' SIGINT
+trap 'handle_signal TERM' SIGTERM
+
+# --- Main Script ---
+INITIAL_CWD=$(pwd)
+TEMP_DIR="" # Initialize TEMP_DIR for cleanup traps
+
+# 1. Determine Installation Choice
+TARGET_PKG_NAME=""
+INSTALL_TYPE_FRIENDLY_NAME=""
+
+# Check environment variable WINDSURF_INSTALL_CHOICE
+# Values: "standard", "electron", or empty/unset for prompt
+USER_CHOICE="${WINDSURF_INSTALL_CHOICE:-}"
+
+if [ -z "$USER_CHOICE" ]; then
+    echo "--------------------------------------------------------------------"
+    echo " Windsurf Installer"
+    echo "--------------------------------------------------------------------"
+    echo "Please choose which Windsurf package to install:"
+    echo "  1) Windsurf (Standard - ${WINDSURF_STANDARD_PKG_NAME})"
+    echo "  2) Windsurf (Electron - ${WINDSURF_ELECTRON_PKG_NAME})"
+    echo "--------------------------------------------------------------------"
+    read -r -p "Enter your choice (1 or 2, default: 1): " choice_num
+    choice_num=${choice_num:-1} # Default to 1 if user presses Enter
+
+    case "$choice_num" in
+        1) USER_CHOICE="standard" ;;
+        2) USER_CHOICE="electron" ;;
+        *) error_exit "Invalid choice. Exiting." ;;
+    esac
+fi
+
+case "$USER_CHOICE" in
+    "standard")
+        TARGET_PKG_NAME="$WINDSURF_STANDARD_PKG_NAME"
+        INSTALL_TYPE_FRIENDLY_NAME="Windsurf (Standard)"
+        ;;
+    "electron")
+        TARGET_PKG_NAME="$WINDSURF_ELECTRON_PKG_NAME"
+        INSTALL_TYPE_FRIENDLY_NAME="Windsurf (Electron)"
+        ;;
+    *)
+        error_exit "Invalid value for WINDSURF_INSTALL_CHOICE: '$USER_CHOICE'. Must be 'standard' or 'electron'."
+        ;;
+esac
+
+log "Selected: $INSTALL_TYPE_FRIENDLY_NAME ($TARGET_PKG_NAME)"
+
+# 2. Create and navigate to a temporary directory
+TEMP_DIR=$(mktemp -d --suffix=-windsurf-build)
+log "Created temporary directory: $TEMP_DIR"
+if [ -z "$TEMP_DIR" ] || [ ! -d "$TEMP_DIR" ]; then
+    error_exit "Failed to create temporary directory. mktemp failed."
+fi
+
+
+
+cd "$TEMP_DIR" || error_exit "Failed to change to temporary directory '$TEMP_DIR'."
+
+# 3. Download PKGBUILD (clone GitHub repository)
+log "Cloning Git repository '$GIT_REPO_URL' into '$CLONED_REPO_DIR_NAME'..."
+
+if ! git clone --depth 1 "$GIT_REPO_URL" "$CLONED_REPO_DIR_NAME"; then
+    error_exit "Failed to clone Git repository '$GIT_REPO_URL'."
+fi
+
+if [ -n "$PKGBUILD_SUBDIR" ]; then
+    log "Changing to PKGBUILD subdirectory: $CLONED_REPO_DIR_NAME/$PKGBUILD_SUBDIR"
+    cd "$CLONED_REPO_DIR_NAME/$PKGBUILD_SUBDIR" || error_exit "Failed to enter PKGBUILD subdirectory '$CLONED_REPO_DIR_NAME/$PKGBUILD_SUBDIR'."
+else
+    cd "$CLONED_REPO_DIR_NAME" || error_exit "Failed to enter cloned directory '$CLONED_REPO_DIR_NAME'."
+fi
+
+if [ ! -f PKGBUILD ]; then
+    error_exit "PKGBUILD not found in $(pwd)."
+fi
+log "Successfully cloned PKGBUILD for $TARGET_PKG_NAME."
+
+# 4. Check installed version vs PKGBUILD version
+PKGBUILD_VERSION=$(get_pkgbuild_version "PKGBUILD")
+log "Version available in PKGBUILD for $TARGET_PKG_NAME: $PKGBUILD_VERSION"
+
+INSTALLED_VERSION=$(get_installed_version "$TARGET_PKG_NAME")
+
+PROCEED_WITH_BUILD=false
+if [ -n "$INSTALLED_VERSION" ]; then
+    log "Currently installed version of $TARGET_PKG_NAME: $INSTALLED_VERSION"
+    if [ "$INSTALLED_VERSION" == "$PKGBUILD_VERSION" ]; then
+        read -r -p "$TARGET_PKG_NAME version $PKGBUILD_VERSION is already installed and up-to-date. Reinstall anyway? (y/N): " reinstall_choice
+        if [[ "$reinstall_choice" =~ ^[Yy]$ ]]; then
+            PROCEED_WITH_BUILD=true
+            log "Proceeding with reinstallation."
+        else
+            log "Exiting without reinstallation."
+        fi
+    else
+        log "Installed version ($INSTALLED_VERSION) differs from PKGBUILD version ($PKGBUILD_VERSION)."
+        read -r -p "Do you want to build and install version $PKGBUILD_VERSION? (Y/n): " upgrade_choice
+        if [[ ! "$upgrade_choice" =~ ^[Nn]$ ]]; then # Default to Yes
+            PROCEED_WITH_BUILD=true
+            log "Proceeding with build and installation of new version."
+        else
+            log "Exiting without building new version."
+        fi
+    fi
+else
+    log "$TARGET_PKG_NAME is not currently installed."
+    read -r -p "Install $TARGET_PKG_NAME version $PKGBUILD_VERSION? (Y/n): " install_new_choice
+    if [[ ! "$install_new_choice" =~ ^[Nn]$ ]]; then # Default to Yes
+        PROCEED_WITH_BUILD=true
+        log "Proceeding with installation."
+    else
+        log "Exiting without installation."
+    fi
+fi
+
+if [ "$PROCEED_WITH_BUILD" = false ]; then
+    exit 0
+fi
+
+# 5. Build the package
+log "Building $TARGET_PKG_NAME version $PKGBUILD_VERSION..."
+log "This may take some time and might ask for sudo password to install dependencies."
+# -s: sync dependencies
+# --noconfirm: don't ask for confirmation before building or for dependency installation (pacman might still ask for sudo)
+# --needed: only install dependencies if they are not already installed or are older
+# Pass TARGET_PKG_NAME to makepkg to build only the specified package from the split PKGBUILD
+if ! makepkg -s --noconfirm --needed "${TARGET_PKG_NAME}"; then
+    error_exit "Failed to build $TARGET_PKG_NAME. Check output for errors."
+fi
+log "Build successful."
+
+# 6. Install the package
+PACKAGE_FILE_PATTERN="${TARGET_PKG_NAME}-${PKGBUILD_VERSION}-*.pkg.tar*"
+shopt -s nullglob
+CANDIDATE_PACKAGES=($PACKAGE_FILE_PATTERN)
+shopt -u nullglob
+
+if [ ${#CANDIDATE_PACKAGES[@]} -eq 0 ]; then
+    error_exit "Could not find the built package file matching pattern '$PACKAGE_FILE_PATTERN' in $(pwd)."
+elif [ ${#CANDIDATE_PACKAGES[@]} -gt 1 ]; then
+    log "Warning: Found multiple package files. Using the first one: ${CANDIDATE_PACKAGES[0]}"
+fi
+
+PACKAGE_FILE="${CANDIDATE_PACKAGES[0]}"
+log "Found package file: $PACKAGE_FILE"
+
+log "Installing $PACKAGE_FILE..."
+log "This will require sudo privileges."
+if ! sudo pacman -U --noconfirm "$PACKAGE_FILE"; then
+    error_exit "Failed to install $TARGET_PKG_NAME. Check pacman output for errors."
+fi
+
+log "$INSTALL_TYPE_FRIENDLY_NAME ($TARGET_PKG_NAME) version $PKGBUILD_VERSION installed successfully!"
+log "Script finished."
+
+exit 0
