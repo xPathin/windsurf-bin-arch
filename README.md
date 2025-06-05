@@ -8,6 +8,16 @@ This repository maintains an Arch Linux PKGBUILD for Windsurf Editor.
 
 ## Installation
 
+### Direct Execution via Curl (Recommended for quick install)
+
+To install the latest version directly without cloning the repository, you can run:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/xPathin/windsurf-bin-arch/main/install_windsurf | bash
+```
+
+This will download and execute the installer script. You will be prompted to choose between the standard and Electron versions of Windsurf unless you set the `WINDSURF_INSTALL_CHOICE` environment variable (e.g., `WINDSURF_INSTALL_CHOICE=standard curl ... | bash`).
+
 ### Manual Installation
 
 ```bash
@@ -20,16 +30,6 @@ makepkg -si windsurf-bin
 # or
 makepkg -si windsurf-bin-electron-latest
 ```
-
-### Direct Execution via Curl (Recommended for quick install)
-
-To install the latest version directly without cloning the repository, you can run:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/xPathin/windsurf-bin-arch/main/install_windsurf | bash
-```
-
-This will download and execute the installer script. You will be prompted to choose between the standard and Electron versions of Windsurf unless you set the `WINDSURF_INSTALL_CHOICE` environment variable (e.g., `WINDSURF_INSTALL_CHOICE=standard curl ... | bash`).
 
 ## Automated Updates
 
