@@ -3,7 +3,7 @@
 pkgbase=windsurf-bin
 pkgname=(windsurf-bin{,-electron-latest})
 pkgver=1.9.4
-pkgrel=3
+pkgrel=4
 arch=('x86_64')
 url="https://windsurf.com/"
 license=('LicenseRef-Windsurf Editor')
@@ -60,6 +60,7 @@ package_windsurf-bin(){
 	install -Dm755 run-safe.sh "${pkgdir}/usr/bin/windsurf"
 	depends+=(${_electron}) # hidden from --printsrcinfo
 	provides=(windsurf)
+	conflicts=(windsurf windsurf-bin-electron-latest)
 }
 
 package_windsurf-bin-electron-latest(){
