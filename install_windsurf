@@ -221,9 +221,8 @@ log "This may take some time and might ask for sudo password to install dependen
 # --noconfirm: don't ask for confirmation before building or for dependency installation (pacman might still ask for sudo)
 # --needed: only install dependencies if they are not already installed or are older
 # Pass TARGET_PKG_NAME to makepkg to build only the specified package from the split PKGBUILD
-    # Use 'script' to ensure makepkg (and its internal pacman calls for dependencies) runs with a proper pseudo-TTY
-    MAKEPKG_COMMAND="makepkg -s --noconfirm --needed '${TARGET_PKG_NAME}'"
-    if ! script -e -q -c "$MAKEPKG_COMMAND" /dev/null; then
+    # Ensure makepkg's internal sudo calls can get password from tty if needed
+    if ! makepkg -s --noconfirm --needed "${TARGET_PKG_NAME}" < /dev/tty; then
     error_exit "Failed to build $TARGET_PKG_NAME. Check output for errors."
 fi
 log "Build successful."
@@ -243,15 +242,33 @@ fi
 PACKAGE_FILE="${CANDIDATE_PACKAGES[0]}"
 log "Found package file: $PACKAGE_FILE"
 
-log "Installing $PACKAGE_FILE..."
-log "This will require sudo privileges."
-# Use 'script' to ensure pacman runs with a proper pseudo-TTY for interactive prompts
-    # The command string for 'script -c' needs careful quoting if $PACKAGE_FILE could have spaces,
-    # but makepkg typically produces filenames without spaces.
-    PACMAN_COMMAND="sudo pacman -U --noconfirm '${PACKAGE_FILE}'"
-    if ! script -e -q -c "$PACMAN_COMMAND" /dev/null; then
-    error_exit "Failed to install $TARGET_PKG_NAME. Check pacman output for errors."
-fi
+CONFLICTING_PKG_NAME=""
+    if [ "$TARGET_PKG_NAME" == "$WINDSURF_STANDARD_PKG_NAME" ]; then
+        CONFLICTING_PKG_NAME="$WINDSURF_ELECTRON_PKG_NAME"
+    elif [ "$TARGET_PKG_NAME" == "$WINDSURF_ELECTRON_PKG_NAME" ]; then
+        CONFLICTING_PKG_NAME="$WINDSURF_STANDARD_PKG_NAME"
+    fi
+
+    if [ -n "$CONFLICTING_PKG_NAME" ]; then
+        log "Checking for conflicting package: $CONFLICTING_PKG_NAME"
+        if pacman -Q "$CONFLICTING_PKG_NAME" &>/dev/null; then
+            log "Conflict: $CONFLICTING_PKG_NAME is installed. Removing it first..."
+            # Redirect sudo's stdin from /dev/tty for password prompt if needed
+            if ! sudo pacman -R --noconfirm "$CONFLICTING_PKG_NAME" < /dev/tty; then
+                error_exit "Failed to remove conflicting package $CONFLICTING_PKG_NAME. Please resolve manually."
+            fi
+            log "$CONFLICTING_PKG_NAME removed."
+        else
+            log "No conflict with $CONFLICTING_PKG_NAME found (not installed)."
+        fi
+    fi
+
+    log "Installing $PACKAGE_FILE..."
+    log "This will require sudo privileges."
+    # Redirect sudo's stdin from /dev/tty for password prompt if needed
+    if ! sudo pacman -U --noconfirm "$PACKAGE_FILE" < /dev/tty; then
+        error_exit "Failed to install $TARGET_PKG_NAME. Check pacman output for errors."
+    fi
 
 log "$INSTALL_TYPE_FRIENDLY_NAME ($TARGET_PKG_NAME) version $PKGBUILD_VERSION installed successfully!"
 log "Script finished."
