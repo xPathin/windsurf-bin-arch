@@ -182,7 +182,7 @@ PROCEED_WITH_BUILD=false
 if [ -n "$INSTALLED_VERSION" ]; then
     log "Currently installed version of $TARGET_PKG_NAME: $INSTALLED_VERSION"
     if [ "$INSTALLED_VERSION" == "$PKGBUILD_VERSION" ]; then
-        read -r -p "$TARGET_PKG_NAME version $PKGBUILD_VERSION is already installed and up-to-date. Reinstall anyway? (y/N): " reinstall_choice
+        printf "%s version %s is already installed and up-to-date. Reinstall anyway? (y/N): " "$TARGET_PKG_NAME" "$PKGBUILD_VERSION" >&2; read -r reinstall_choice < /dev/tty
         if [[ "$reinstall_choice" =~ ^[Yy]$ ]]; then
             PROCEED_WITH_BUILD=true
             log "Proceeding with reinstallation."
@@ -191,7 +191,7 @@ if [ -n "$INSTALLED_VERSION" ]; then
         fi
     else
         log "Installed version ($INSTALLED_VERSION) differs from PKGBUILD version ($PKGBUILD_VERSION)."
-        read -r -p "Do you want to build and install version $PKGBUILD_VERSION? (Y/n): " upgrade_choice
+        printf "Do you want to build and install version %s? (Y/n): " "$PKGBUILD_VERSION" >&2; read -r upgrade_choice < /dev/tty
         if [[ ! "$upgrade_choice" =~ ^[Nn]$ ]]; then # Default to Yes
             PROCEED_WITH_BUILD=true
             log "Proceeding with build and installation of new version."
@@ -201,7 +201,7 @@ if [ -n "$INSTALLED_VERSION" ]; then
     fi
 else
     log "$TARGET_PKG_NAME is not currently installed."
-    read -r -p "Install $TARGET_PKG_NAME version $PKGBUILD_VERSION? (Y/n): " install_new_choice
+    printf "Install %s version %s? (Y/n): " "$TARGET_PKG_NAME" "$PKGBUILD_VERSION" >&2; read -r install_new_choice < /dev/tty
     if [[ ! "$install_new_choice" =~ ^[Nn]$ ]]; then # Default to Yes
         PROCEED_WITH_BUILD=true
         log "Proceeding with installation."
@@ -221,7 +221,9 @@ log "This may take some time and might ask for sudo password to install dependen
 # --noconfirm: don't ask for confirmation before building or for dependency installation (pacman might still ask for sudo)
 # --needed: only install dependencies if they are not already installed or are older
 # Pass TARGET_PKG_NAME to makepkg to build only the specified package from the split PKGBUILD
-if ! makepkg -s --noconfirm --needed "${TARGET_PKG_NAME}"; then
+    # Use 'script' to ensure makepkg (and its internal pacman calls for dependencies) runs with a proper pseudo-TTY
+    MAKEPKG_COMMAND="makepkg -s --noconfirm --needed '${TARGET_PKG_NAME}'"
+    if ! script -e -q -c "$MAKEPKG_COMMAND" /dev/null; then
     error_exit "Failed to build $TARGET_PKG_NAME. Check output for errors."
 fi
 log "Build successful."
