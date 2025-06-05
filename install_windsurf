@@ -243,7 +243,7 @@ log "Found package file: $PACKAGE_FILE"
 
 log "Installing $PACKAGE_FILE..."
 log "This will require sudo privileges."
-if ! sudo pacman -U --noconfirm "$PACKAGE_FILE"; then
+if ! sudo pacman -U --noconfirm "$PACKAGE_FILE" < /dev/tty; then
     error_exit "Failed to install $TARGET_PKG_NAME. Check pacman output for errors."
 fi
 
