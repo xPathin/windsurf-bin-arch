@@ -102,21 +102,28 @@ INSTALL_TYPE_FRIENDLY_NAME=""
 USER_CHOICE="${WINDSURF_INSTALL_CHOICE:-}"
 
 if [ -z "$USER_CHOICE" ]; then
-    echo "--------------------------------------------------------------------"
-    echo " Windsurf Installer"
-    echo "--------------------------------------------------------------------"
-    echo "Please choose which Windsurf package to install:"
-    echo "  1) Windsurf (Standard - ${WINDSURF_STANDARD_PKG_NAME})"
-    echo "  2) Windsurf (Electron - ${WINDSURF_ELECTRON_PKG_NAME})"
-    echo "--------------------------------------------------------------------"
-    read -r -p "Enter your choice (1 or 2, default: 1): " choice_num </dev/tty
-    choice_num=${choice_num:-1} # Default to 1 if user presses Enter
+    # Redirect stdin for this entire block from /dev/tty
+    {
+        echo "--------------------------------------------------------------------"
+        echo " Windsurf Installer"
+        echo "--------------------------------------------------------------------"
+        echo "Please choose which Windsurf package to install:"
+        echo "  1) Windsurf (Standard - ${WINDSURF_STANDARD_PKG_NAME})"
+        echo "  2) Windsurf (Electron - ${WINDSURF_ELECTRON_PKG_NAME})"
+        echo "--------------------------------------------------------------------"
+        # Explicitly print prompt to /dev/tty and read from /dev/tty (via block redirection)
+        printf "Enter your choice (1 or 2, default: 1): " >&2 # Print prompt to stderr, which should be tty
+        read -r choice_num # read from stdin of this block, which is /dev/tty
+        choice_num=${choice_num:-1} # Default to 1 if user presses Enter
 
-    case "$choice_num" in
-        1) USER_CHOICE="standard" ;;
-        2) USER_CHOICE="electron" ;;
-        *) error_exit "Invalid choice. Exiting." ;;
-    esac
+        case "$choice_num" in
+            1) USER_CHOICE="standard" ;;
+            2) USER_CHOICE="electron" ;;
+            *) 
+                # error_exit already prints to stderr
+                error_exit "Invalid choice. Exiting." ;;
+        esac
+    } < /dev/tty
 fi
 
 case "$USER_CHOICE" in
