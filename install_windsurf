@@ -243,7 +243,11 @@ log "Found package file: $PACKAGE_FILE"
 
 log "Installing $PACKAGE_FILE..."
 log "This will require sudo privileges."
-if ! sudo pacman -U --noconfirm "$PACKAGE_FILE" < /dev/tty; then
+# Use 'script' to ensure pacman runs with a proper pseudo-TTY for interactive prompts
+    # The command string for 'script -c' needs careful quoting if $PACKAGE_FILE could have spaces,
+    # but makepkg typically produces filenames without spaces.
+    PACMAN_COMMAND="sudo pacman -U --noconfirm '${PACKAGE_FILE}'"
+    if ! script -e -q -c "$PACMAN_COMMAND" /dev/null; then
     error_exit "Failed to install $TARGET_PKG_NAME. Check pacman output for errors."
 fi
 
