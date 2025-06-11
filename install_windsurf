@@ -242,31 +242,31 @@ fi
 PACKAGE_FILE="${CANDIDATE_PACKAGES[0]}"
 log "Found package file: $PACKAGE_FILE"
 
-CONFLICTING_PKG_NAME=""
-    if [ "$TARGET_PKG_NAME" == "$WINDSURF_STANDARD_PKG_NAME" ]; then
-        CONFLICTING_PKG_NAME="$WINDSURF_ELECTRON_PKG_NAME"
-    elif [ "$TARGET_PKG_NAME" == "$WINDSURF_ELECTRON_PKG_NAME" ]; then
-        CONFLICTING_PKG_NAME="$WINDSURF_STANDARD_PKG_NAME"
-    fi
+# CONFLICTING_PKG_NAME=""
+#     if [ "$TARGET_PKG_NAME" == "$WINDSURF_STANDARD_PKG_NAME" ]; then
+#         CONFLICTING_PKG_NAME="$WINDSURF_ELECTRON_PKG_NAME"
+#     elif [ "$TARGET_PKG_NAME" == "$WINDSURF_ELECTRON_PKG_NAME" ]; then
+#         CONFLICTING_PKG_NAME="$WINDSURF_STANDARD_PKG_NAME"
+#     fi
 
-    if [ -n "$CONFLICTING_PKG_NAME" ]; then
-        log "Checking for conflicting package: $CONFLICTING_PKG_NAME"
-        if pacman -Q "$CONFLICTING_PKG_NAME" &>/dev/null; then
-            log "Conflict: $CONFLICTING_PKG_NAME is installed. Removing it first..."
-            # Redirect sudo's stdin from /dev/tty for password prompt if needed
-            if ! sudo pacman -R --noconfirm "$CONFLICTING_PKG_NAME" < /dev/tty; then
-                error_exit "Failed to remove conflicting package $CONFLICTING_PKG_NAME. Please resolve manually."
-            fi
-            log "$CONFLICTING_PKG_NAME removed."
-        else
-            log "No conflict with $CONFLICTING_PKG_NAME found (not installed)."
-        fi
-    fi
+#     if [ -n "$CONFLICTING_PKG_NAME" ]; then
+#         log "Checking for conflicting package: $CONFLICTING_PKG_NAME"
+#         if pacman -Q "$CONFLICTING_PKG_NAME" &>/dev/null; then
+#             log "Conflict: $CONFLICTING_PKG_NAME is installed. Removing it first..."
+#             # Redirect sudo's stdin from /dev/tty for password prompt if needed
+#             if ! sudo pacman -R --noconfirm "$CONFLICTING_PKG_NAME" < /dev/tty; then
+#                 error_exit "Failed to remove conflicting package $CONFLICTING_PKG_NAME. Please resolve manually."
+#             fi
+#             log "$CONFLICTING_PKG_NAME removed."
+#         else
+#             log "No conflict with $CONFLICTING_PKG_NAME found (not installed)."
+#         fi
+#     fi
 
     log "Installing $PACKAGE_FILE..."
     log "This will require sudo privileges."
     # Redirect sudo's stdin from /dev/tty for password prompt if needed
-    if ! sudo pacman -U --noconfirm "$PACKAGE_FILE" < /dev/tty; then
+    if ! sudo pacman -U "$PACKAGE_FILE" < /dev/tty; then
         error_exit "Failed to install $TARGET_PKG_NAME. Check pacman output for errors."
     fi
 
