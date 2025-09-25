@@ -29,8 +29,24 @@ sha256sums=('b6f842fc3361d891a48e38719c2b2cff3f707f33c974b911dc914e1908aff369'
             '5da1525b5fe804b9192c05e1cbf8d751d852e3717fb2787c7ffe98fd5d93e8c1')
 build() {
 	tar -xf "data.tar.xz" --exclude 'usr/share/windsurf/[^r]*' --exclude 'usr/share/windsurf/*.pak'
-	mv usr/share/{appdata,metainfo}
-	mv usr/share/zsh/{vendor-completions,site-functions}
+
+	# Ensure metainfo exists and safely move contents from appdata if present
+	mkdir -p usr/share/metainfo
+	if [ -d usr/share/appdata ]; then
+		shopt -s dotglob nullglob
+		mv usr/share/appdata/* usr/share/metainfo/ || true
+		shopt -u dotglob nullglob
+		rmdir usr/share/appdata 2>/dev/null || true
+	fi
+
+	# Ensure zsh site-functions exists and safely move completions
+	mkdir -p usr/share/zsh/site-functions
+	if [ -d usr/share/zsh/vendor-completions ]; then
+		shopt -s dotglob nullglob
+		mv usr/share/zsh/vendor-completions/* usr/share/zsh/site-functions/ || true
+		shopt -u dotglob nullglob
+		rmdir usr/share/zsh/vendor-completions 2>/dev/null || true
+	fi
 	
 	# Launcher
 	_app=/usr/share/windsurf/resources/app
@@ -40,12 +56,32 @@ build() {
 	ln -sf /usr/bin/windsurf usr/share/windsurf/windsurf
 	
 	# Replacements
+	# Ensure windsurd extension bin path exists for symlinks
+	mkdir -p usr/share/windsurf/resources/app/extensions/windsurf/bin
 	ln -svf /usr/bin/fd usr/share/windsurf/resources/app/extensions/windsurf/bin/fd
 	ln -svf /usr/bin/rg usr/share/windsurf/resources/app/node_modules/@vscode/ripgrep/bin/rg
 	ln -svf /usr/bin/xdg-open usr/share/windsurf/resources/app/node_modules/open/xdg-open
 	
-	# SVG Icon
-	install -Dm644 "usr/share/windsurf/resources/app/out/media/code-icon.svg" "usr/share/icons/hicolor/scalable/apps/windsurf.svg"
+	# SVG Icon (handle path changes across versions)
+	ICON_DEST="usr/share/icons/hicolor/scalable/apps/windsurf.svg"
+	ICON_CANDIDATES=(
+		"usr/share/windsurf/resources/app/out/media/code-icon.svg"
+		"usr/share/windsurf/resources/app/out/media/code-iconsvg.svg"
+		"usr/share/windsurf/resources/app/out/media/windsurf-icon.svg"
+		"usr/share/windsurf/resources/app/out/vs/code/browser/workbench/media/code-icon.svg"
+	)
+	ICON_FOUND=""
+	for icon in "${ICON_CANDIDATES[@]}"; do
+		if [ -f "$icon" ]; then
+			ICON_FOUND="$icon"
+			break
+		fi
+	done
+	if [ -n "$ICON_FOUND" ]; then
+		install -Dm644 "$ICON_FOUND" "$ICON_DEST"
+	else
+		echo "Warning: SVG icon not found in known locations, skipping icon install." >&2
+	fi
 	
 	# Hide entry of URL handler
 	desktop-file-edit --set-key Hidden --set-value true usr/share/applications/windsurf-url-handler.desktop
